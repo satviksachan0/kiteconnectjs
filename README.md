@@ -218,3 +218,9 @@ Hence, in your web application, typically:
 - Store this response in a session and use the
   stored `access_token` and initialise instances
   of Kite client for subsequent API calls.
+
+  ## After fork
+
+- the changes are that data set is added
+- back testing logic is added.
+- to back test use `npx ts-node --transpile-only strategy/strategy_v2.ts`
