@@ -144,11 +144,22 @@ export interface TradeRecord {
   exitPrice: number;
   profit: number;
   capitalAfter: number;
+  numLots: number;
+  forcedFridayExit?: boolean;
 }
 
 // Configuration constants
 const STRIKE_STEP = 50;   // Nifty strikes increment in 50 points
-const LOT_SIZE = 75;      // Nifty option lot size
+const BASE_LOT_SIZE = 75; // Nifty option lot size
+/**
+ * Calculate number of lots based on current capital.
+ * 1 lot for <=1L, 2 lots for >1L, Math.floor(capital/1L) for >3L
+ */
+function getNumLots(currCapital: number): number {
+  if (currCapital > 300000) return Math.floor(currCapital / 100000);
+  if (currCapital > 100000) return 2;
+  return 1;
+}
 const START_CAPITAL = 15_000;
 const ENTRY_BUFFER = 10;  // buy 10 below LTP
 const RISK_PER_TRADE = 10; // stop amount in rupees
@@ -487,7 +498,9 @@ function backtestTrailing(
       return;
     }
     const entryLimit = ltp - ENTRY_BUFFER;
-    const cost = entryLimit * LOT_SIZE;
+    const numLots = getNumLots(capital);
+    const lotSize = BASE_LOT_SIZE * numLots;
+    const cost = entryLimit * lotSize;
     if (cost > capital) {
       debugLog('backtestTrailing: insufficient capital', { cost, capital });
       return;
@@ -506,10 +519,11 @@ function backtestTrailing(
       debugLog('backtestTrailing: entryLimit not within day-0 range', { entryLimit, low: contract.low, high: contract.high });
       return;
     }
-    let hitTarget1 = false;
-    let currentStop = initialStop;
-    let exitPrice: number | undefined;
-    let exitDate: Date | undefined;
+  let hitTarget1 = false;
+  let currentStop = initialStop;
+  let exitPrice: number | undefined;
+  let exitDate: Date | undefined;
+  let forcedFridayExit = false;
     // Day 0: check if final target or stop is hit
     if (contract.high >= finalTarget) {
       exitPrice = finalTarget;
@@ -529,9 +543,30 @@ function backtestTrailing(
       for (let j = 1; j <= 3; j++) {
         const nextIdx = idx + j;
         if (nextIdx >= daily.length) break;
-  const nextDate = daily[nextIdx].date;
-  if (isNaN(nextDate.getTime())) continue;
-  const k = nextDate.toISOString().slice(0, 10);
+        const nextDate = daily[nextIdx].date;
+        if (isNaN(nextDate.getTime())) continue;
+        // Force exit on Friday at 3:15pm
+        if (nextDate.getDay() === 5) { // Friday
+          // Simulate 3:15pm exit: use LTP if available
+          const k = nextDate.toISOString().slice(0, 10);
+          const snapNext = groupedOpts.get(k);
+          if (snapNext) {
+            const rows = snapNext.filter(
+              (r) => r.type === contract.type && r.strike === contract.strike && r.expiry === contract.expiry
+            );
+            if (rows.length > 0) {
+              const row = rows[0];
+              const ltpExit = row.ltp || row.high || row.low;
+              if (ltpExit && !isNaN(ltpExit)) {
+                exitPrice = ltpExit;
+                exitDate = nextDate;
+                forcedFridayExit = true;
+                break;
+              }
+            }
+          }
+        }
+        const k = nextDate.toISOString().slice(0, 10);
         const snapNext = groupedOpts.get(k);
         if (!snapNext) continue;
         // Find matching option row
@@ -581,7 +616,7 @@ function backtestTrailing(
       }
     }
     if (exitPrice === undefined) return;
-    const profit = (exitPrice - entryLimit) * LOT_SIZE;
+  const profit = (exitPrice - entryLimit) * lotSize;
     capital += profit;
     trades.push({
       entryDate: tradeDate,
@@ -597,7 +632,9 @@ function backtestTrailing(
       finalTarget,
       exitPrice,
       profit,
-      capitalAfter: capital
+      capitalAfter: capital,
+      numLots,
+      forcedFridayExit
     });
   });
   return trades;
