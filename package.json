@@ -9,7 +9,11 @@
     "build": "tsc --project tsconfig.json",
     "build-test": "tsc --project test/tsconfig.json",
     "eslint:fix": "eslint",
-    "test": "npm run build && npm run build-test && mocha --allowJs test/**/*.js && rimraf **/*.js"
+    "test": "npm run build && npm run build-test && mocha --allowJs test/**/*.js && rimraf **/*.js",
+    "strategy:auth": "npx ts-node strategy/live_trading_example.ts auth",
+    "strategy:live": "npx ts-node strategy/live_trading_example.ts live",
+    "strategy:manual": "npx ts-node strategy/live_trading_example.ts manual",
+    "strategy:backtest": "npx ts-node strategy/strategy_v2.ts"
   },
   "files": [
     "dist",

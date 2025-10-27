@@ -44,3 +44,13 @@ jspm_packages
 # Optional REPL history
 .node_repl_history
 
+# Live trading sensitive files
+.env
+strategy/.env
+*.env
+live_trades.jsonl
+strategy/live_trades.jsonl
+
+# Trading logs and data
+trades_*.csv
+live_*.log
