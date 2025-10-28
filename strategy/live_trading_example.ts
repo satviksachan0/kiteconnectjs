@@ -132,9 +132,33 @@ export async function runLiveStrategy() {
     // Verify connection
     console.log('Verifying connection to Kite API...');
     const summary = await manager.getAccountSummary();
-    console.log('Connection successful!');
-    console.log('Available Margin:', summary.availableMargin);
+    console.log('Connection successful!\n');
+    
+    // Display account details
+    console.log('=== Account Details ===');
+    console.log('Cash Balance: ₹', summary.cashBalance.toFixed(2));
+    console.log('Available Margin: ₹', summary.availableMargin.toFixed(2));
+    console.log('Used Margin: ₹', summary.usedMargin.toFixed(2));
+    console.log('Collateral: ₹', summary.collateral.toFixed(2));
+    console.log('Total Margin: ₹', summary.totalMargin.toFixed(2));
     console.log('');
+    
+    // Display Nifty current data
+    try {
+      const niftySpot = await manager.getNiftySpot();
+      const niftyOHLC = await manager.getNiftyOHLC();
+      
+      console.log('=== Nifty 50 Current Data ===');
+      console.log('LTP (Last Traded Price):', niftySpot.toFixed(2));
+      console.log('Open:', niftyOHLC.last_price || niftyOHLC.open || 'N/A');
+      console.log('High:', niftyOHLC.high || 'N/A');
+      console.log('Low:', niftyOHLC.low || 'N/A');
+      console.log('Close (Previous):', niftyOHLC.close || 'N/A');
+      console.log('');
+    } catch (error) {
+      console.log('Could not fetch Nifty data (market may be closed)');
+      console.log('');
+    }
     
     if (config.dryRun) {
       console.log('=== DRY RUN MODE ===');
@@ -193,12 +217,23 @@ export async function runLiveStrategy() {
           return;
         }
         
-        // Get account summary
+        // Get account summary and current Nifty price
         const summary = await manager.getAccountSummary();
+        let niftySpot = 0;
+        try {
+          niftySpot = await manager.getNiftySpot();
+        } catch (error) {
+          // Ignore if market is closed
+        }
         
         // Display status
         console.log(`[${new Date().toLocaleTimeString()}] Status:`);
+        if (niftySpot > 0) {
+          console.log(`  Nifty Spot: ${niftySpot.toFixed(2)}`);
+        }
         console.log(`  Capital: ₹${summary.capital.toFixed(2)}`);
+        console.log(`  Available Margin: ₹${summary.availableMargin.toFixed(2)}`);
+        console.log(`  Used Margin: ₹${summary.usedMargin.toFixed(2)}`);
         console.log(`  Open Positions: ${summary.openPositions}`);
         console.log(`  Daily Trades: ${dailyTrades}`);
         console.log(`  Daily P&L: ₹${dailyPnL.toFixed(2)}`);

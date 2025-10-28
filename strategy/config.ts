@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Simple .env file parser (no external dependencies)
-function loadEnvFile(filePath: string): void {
+function loadEnvFile(filePath: string): boolean {
   try {
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, 'utf8');
@@ -18,7 +18,7 @@ function loadEnvFile(filePath: string): void {
       for (const line of lines) {
         const trimmed = line.trim();
         // Skip comments and empty lines
-        if (!trimmed || trimmed.startsWith('#')) continue;
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('/*') || trimmed.startsWith('*')) continue;
         
         const [key, ...valueParts] = trimmed.split('=');
         if (key && valueParts.length > 0) {
@@ -26,14 +26,35 @@ function loadEnvFile(filePath: string): void {
           process.env[key.trim()] = value;
         }
       }
+      console.log(`[Config] Loaded .env from: ${filePath}`);
+      return true;
     }
+    return false;
   } catch (error) {
     console.warn('Could not load .env file:', error);
+    return false;
   }
 }
 
 // Load environment variables from .env file
-loadEnvFile(path.join(__dirname, '.env'));
+// Try multiple paths to handle both ts-node and compiled scenarios
+const envPaths = [
+  path.join(process.cwd(), 'strategy', '.env'),     // When running from project root with ts-node
+  path.join(__dirname, '.env'),                     // When running from compiled JS
+  path.join(process.cwd(), '.env'),                 // Fallback to root .env
+];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  if (loadEnvFile(envPath)) {
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.warn('[Config] Warning: No .env file found. Tried paths:', envPaths);
+}
 
 export interface TradingConfig {
   // API Credentials

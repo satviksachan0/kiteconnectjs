@@ -431,6 +431,32 @@ export class LiveStrategyManager {
   }
 
   /**
+   * Get Nifty OHLC data
+   */
+  public async getNiftyOHLC(): Promise<any> {
+    try {
+      const ohlc = await this.kc.getOHLC(['NSE:NIFTY 50']);
+      return ohlc['NSE:NIFTY 50'] || { open: 0, high: 0, low: 0, close: 0 };
+    } catch (error) {
+      this.log('Error getting Nifty OHLC:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Nifty full quote with all details
+   */
+  public async getNiftyQuote(): Promise<any> {
+    try {
+      const quote = await this.kc.getQuote(['NSE:NIFTY 50']);
+      return quote['NSE:NIFTY 50'] || null;
+    } catch (error) {
+      this.log('Error getting Nifty quote:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get current positions summary
    */
   public getPositionsSummary(): any[] {
@@ -458,9 +484,13 @@ export class LiveStrategyManager {
       return {
         capital: this.capital,
         availableMargin: margins.equity?.available?.live_balance || 0,
+        cashBalance: margins.equity?.available?.cash || 0,
+        collateral: margins.equity?.available?.collateral || 0,
         usedMargin: margins.equity?.utilised?.debits || 0,
+        totalMargin: (margins.equity?.available?.live_balance || 0) + (margins.equity?.utilised?.debits || 0),
         openPositions: this.positions.size,
-        positionDetails: this.getPositionsSummary()
+        positionDetails: this.getPositionsSummary(),
+        marginDetails: margins.equity // Full margin object for detailed logging
       };
     } catch (error) {
       this.log('Error getting account summary:', error);
