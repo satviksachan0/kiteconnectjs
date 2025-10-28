@@ -78,7 +78,7 @@ export class LiveStrategyManager {
     this.kc = new KiteConnect({
       api_key: config.apiKey,
       access_token: config.accessToken,
-      debug: config.debugMode
+      debug: false  // Disable axios verbose logging
     });
 
     this.log('Live Strategy Manager initialized');
@@ -224,10 +224,22 @@ export class LiveStrategyManager {
    * Enter a new position based on a signal
    */
   public async enterPosition(signal: Signal, spotPrice: number): Promise<LivePosition | null> {
+    const entryAttempt = {
+      timestamp: new Date().toISOString(),
+      signal: signal.type,
+      side: signal.side,
+      spotPrice,
+      status: 'ATTEMPT',
+      error: null as string | null
+    };
+
     try {
       // Check if max positions reached
       if (this.positions.size >= this.config.maxPositions) {
         this.log('Max positions reached. Skipping entry.');
+        entryAttempt.status = 'REJECTED';
+        entryAttempt.error = 'Max positions reached';
+        this.logOrderAttempt(entryAttempt);
         return null;
       }
 
@@ -286,9 +298,28 @@ export class LiveStrategyManager {
       this.log(`Position entered: ${tradingSymbol} @ ₹${entryPrice}`);
       this.log(`Targets: T1=₹${target1}, Final=₹${finalTarget}, Stop=₹${initialStop}`);
       
+      // Log successful entry
+      entryAttempt.status = 'SUCCESS';
+      const entryLog = {
+        ...entryAttempt,
+        orderId,
+        tradingSymbol,
+        strike,
+        optionType,
+        ltp,
+        entryPrice,
+        quantity,
+        targets: { target1, trailingStop, finalTarget },
+        initialStop
+      };
+      this.logOrderAttempt(entryLog);
+      
       return position;
     } catch (error) {
       this.log('Error entering position:', error);
+      entryAttempt.status = 'FAILED';
+      entryAttempt.error = error instanceof Error ? error.message : String(error);
+      this.logOrderAttempt(entryAttempt);
       return null;
     }
   }
@@ -394,12 +425,35 @@ export class LiveStrategyManager {
   }
 
   /**
+   * Log order attempt (entry/exit)
+   */
+  private logOrderAttempt(data: any): void {
+    try {
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        type: 'ORDER_ATTEMPT',
+        ...data
+      };
+      const line = JSON.stringify(logEntry) + '\n';
+      fs.appendFileSync('strategy/order_log.jsonl', line, 'utf8');
+      
+      // Also log to console in debug mode
+      if (this.config.debugMode) {
+        console.log('[ORDER LOG]', logEntry.status, logEntry);
+      }
+    } catch (error) {
+      console.error('Error writing order log:', error);
+    }
+  }
+
+  /**
    * Save trade record to file
    */
   private async saveTradeRecord(position: LivePosition, exitPrice: number, reason: string): Promise<void> {
     const record = {
       entryDate: position.entryDate.toISOString(),
       exitDate: new Date().toISOString(),
+      orderId: position.orderId,
       tradingSymbol: position.tradingSymbol,
       side: position.side,
       strike: position.strike,
@@ -408,13 +462,25 @@ export class LiveStrategyManager {
       exitPrice,
       quantity: position.quantity,
       profit: position.profit,
+      profitPercentage: ((exitPrice - position.entryPrice) / position.entryPrice * 100).toFixed(2),
       capital: this.capital,
       reason,
       status: position.status
     };
     
     const line = JSON.stringify(record) + '\n';
-    fs.appendFileSync('live_trades.jsonl', line, 'utf8');
+    fs.appendFileSync('strategy/live_trades.jsonl', line, 'utf8');
+    
+    // Also log exit attempt
+    this.logOrderAttempt({
+      type: 'EXIT',
+      status: 'SUCCESS',
+      orderId: position.orderId,
+      tradingSymbol: position.tradingSymbol,
+      exitPrice,
+      profit: position.profit,
+      reason
+    });
   }
 
   /**

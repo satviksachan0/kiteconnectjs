@@ -50,7 +50,10 @@ strategy/.env
 *.env
 live_trades.jsonl
 strategy/live_trades.jsonl
+strategy/order_log.jsonl
+strategy/trading_summary.json
 
 # Trading logs and data
 trades_*.csv
 live_*.log
+order_*.log
