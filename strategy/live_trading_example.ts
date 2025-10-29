@@ -134,6 +134,11 @@ export async function runLiveStrategy() {
     const summary = await manager.getAccountSummary();
     console.log('Connection successful!\n');
     
+    // Initialize indicators with historical data
+    console.log('Fetching historical data and computing 15-min indicators...');
+    await manager.updateIndicators();
+    console.log('15-minute indicators updated successfully!\n');
+    
     // Display account details
     console.log('=== Account Details ===');
     console.log('Cash Balance: ₹', summary.cashBalance.toFixed(2));
@@ -172,12 +177,15 @@ export async function runLiveStrategy() {
     console.log('Trading started. Press Ctrl+C to stop gracefully.\n');
     
     // Track daily metrics
-    let dailyTrades = 0;
-    let dailyPnL = 0;
+    let lastSignalCheckTime = Date.now();
     
     // Main trading loop - runs every 60 seconds
     const tradingInterval = setInterval(async () => {
       try {
+        // Get current metrics from manager
+        const dailyTrades = manager.getTodayTradeCount();
+        const dailyPnL = manager.getTodayPnL();
+        
         // Check if market is still open
         if (!isMarketOpen(config)) {
           console.log('Market closed. Stopping trading...');
@@ -203,6 +211,34 @@ export async function runLiveStrategy() {
           await manager.closeAllPositions();
           manager.stopTrading();
           return;
+        }
+        
+        // Update indicators periodically (every 5 minutes)
+        const now = Date.now();
+        if (now - lastSignalCheckTime >= 300000) { // 5 minutes
+          console.log('Updating 15-min indicators...');
+          await manager.updateIndicators();
+          lastSignalCheckTime = now;
+        }
+        
+        // Generate signals and check for entry opportunities
+        const signals = manager.generateTodaySignals();
+        if (signals.length > 0 && manager.isActive()) {
+          console.log(`Found ${signals.length} signals from recent 15-min bars. Checking entry conditions...`);
+          
+          // Get current Nifty spot price
+          const niftySpot = await manager.getNiftySpot();
+          
+          // Try to enter positions for each signal (respecting max positions limit)
+          for (const signal of signals) {
+            const currentTradeCount = manager.getTodayTradeCount();
+            if (currentTradeCount >= config.maxDailyTrades) break;
+            
+            const position = await manager.enterPosition(signal, niftySpot);
+            if (position) {
+              console.log(`Trade ${currentTradeCount + 1} entered: ${position.tradingSymbol}`);
+            }
+          }
         }
         
         // Monitor existing positions
@@ -276,8 +312,8 @@ export async function runLiveStrategy() {
       const finalSummary = await manager.getAccountSummary();
       console.log('\nFinal Status:');
       console.log('Capital:', finalSummary.capital);
-      console.log('Daily Trades:', dailyTrades);
-      console.log('Daily P&L:', dailyPnL);
+      console.log('Daily Trades:', manager.getTodayTradeCount());
+      console.log('Daily P&L:', manager.getTodayPnL());
       
       console.log('\nTrading session ended. Goodbye!\n');
       process.exit(0);

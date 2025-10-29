@@ -1,3 +1,9 @@
+# Copyright © 2024 Satvik Sachan (@satviksachan0)
+
+# All Rights Reserved. This code is proprietary and confidential.
+
+# Unauthorized copying, distribution, or use of this repository is strictly prohibited and may result in legal action.
+
 # The Kite Connect API TypeScript/JavaScript Client
 
 The official TypeScript/JavaScript for communicating with the [Kite Connect API](https://kite.trade).
